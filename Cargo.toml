@@ -9,6 +9,7 @@ edition     = "2021"
 
 [dependencies]
 clap = { version = "4.3.0", features = ["derive"] }
+clean-path = "0.2.1"
 ignore = "0.4.20"
 swc_atoms = "0.5.6"
 swc_common = { version = "0.31.10", features = ["tty-emitter"] }

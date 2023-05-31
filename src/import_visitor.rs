@@ -11,7 +11,7 @@ use crate::dependency_graph::DependencyGraph;
 pub struct ImportVisitor<'visitor, 'graph> {
     dependency_graph: &'visitor mut DependencyGraph<'graph>,
     file_path: &'graph PathBuf,
-    errors: Vec<String>,
+    pub errors: Vec<String>,
 }
 impl<'visitor, 'graph> ImportVisitor<'visitor, 'graph> {
     pub fn new(

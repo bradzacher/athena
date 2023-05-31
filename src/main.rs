@@ -12,16 +12,21 @@ use crate::parser::parse_file;
 
 fn main() {
     let args = parse_cli();
-    let files = get_files(args);
 
-    println!("Calculating dependency graph...");
+    eprintln!("Getting file list...");
+    let files = get_files(args);
+    eprintln!("Found {} files", files.len());
+
+    eprintln!("Calculating dependency graph...");
     let mut graph = DependencyGraph::new();
     for file in files.iter() {
         let mut visitor = ImportVisitor::new(file, &mut graph);
         parse_file(file, &mut visitor);
+        if !visitor.errors.is_empty() {
+            eprintln!("Errors for file {}:\n{:#?}", file.display(), visitor.errors);
+        }
     }
-
-    println!("{} files parsed", files.len());
+    eprintln!("Done!");
 
     println!("{:#?}", graph);
 }

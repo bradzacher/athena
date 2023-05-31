@@ -1,3 +1,4 @@
+use clean_path::Clean;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -30,8 +31,7 @@ impl<'map> DependencyGraph<'map> {
                 .parent()
                 .expect("Path should not be the root")
                 .join(dependency)
-                .canonicalize()
-                .expect("Expected a valid path")
+                .clean()
         } else {
             // path is a tsconfig path or a node_module
             // TODO

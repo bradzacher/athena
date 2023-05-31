@@ -1,5 +1,6 @@
+use clean_path::Clean;
 use ignore::{types::TypesBuilder, WalkBuilder};
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use crate::cli::CliArgs;
 
@@ -15,10 +16,10 @@ pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
     types_builder.select("javascript");
     let types = types_builder.build().expect("Unable to build types");
 
-    let mut walk_builder = WalkBuilder::new(args.paths[0].to_owned());
+    let mut walk_builder = WalkBuilder::new(absolutize(PathBuf::from(&args.paths[0])));
     if args.paths.len() > 1 {
         for path in args.paths.iter().skip(1) {
-            walk_builder.add(path);
+            walk_builder.add(absolutize(PathBuf::from(&path)));
         }
     }
     walk_builder.types(types);
@@ -34,13 +35,7 @@ pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
                     if file_type.is_dir() {
                         continue;
                     }
-                    files.push(
-                        entry
-                            .path()
-                            .to_owned()
-                            .canonicalize()
-                            .expect("Expected a valid filename"),
-                    );
+                    files.push(entry.path().to_owned().clean());
                 }
                 None => {
                     continue;
@@ -51,4 +46,13 @@ pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
     }
 
     return files;
+}
+
+pub fn absolutize(path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        return path;
+    }
+    return env::current_dir()
+        .expect("Could not access current directory")
+        .join(path);
 }
