@@ -4,6 +4,8 @@ mod file_system;
 mod import_visitor;
 mod parser;
 
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::cli::parse_cli;
@@ -21,16 +23,17 @@ fn main() {
     let duration = start.elapsed();
     eprintln!("Found {} files in {:?}", files.len(), duration);
 
-    eprintln!("Calculating dependency graph...");
+    eprintln!("Parsing and extracting dependencies...");
     let start = Instant::now();
-    let mut graph = DependencyGraph::new();
-    for file in files.iter() {
-        let mut visitor = ImportVisitor::new(file, &mut graph);
+    let graph = Arc::new(Mutex::new(DependencyGraph::new()));
+    files.par_iter().for_each(|file| {
+        let graph = graph.clone();
+        let mut visitor = ImportVisitor::new(file, &graph);
         parse_file(file, &mut visitor);
         if !visitor.errors.is_empty() {
             eprintln!("Errors for file {}:\n{:#?}", file.display(), visitor.errors);
         }
-    }
+    });
     let duration: std::time::Duration = start.elapsed();
     eprintln!("Done in {:?}!", duration);
 

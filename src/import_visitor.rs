@@ -1,6 +1,10 @@
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
-use swc_atoms::js_word;
+use swc_atoms::{js_word, JsWord};
 use swc_ecma_ast::{
     CallExpr, ExportAll, Expr, ImportDecl, Lit, NamedExport, TsImportType, TsModuleRef,
 };
@@ -9,20 +13,27 @@ use swc_ecma_visit::VisitMut;
 use crate::dependency_graph::DependencyGraph;
 
 pub struct ImportVisitor<'visitor, 'graph> {
-    dependency_graph: &'visitor mut DependencyGraph<'graph>,
+    dependency_graph: &'visitor Arc<Mutex<DependencyGraph<'graph>>>,
     file_path: &'graph PathBuf,
     pub errors: Vec<String>,
 }
 impl<'visitor, 'graph> ImportVisitor<'visitor, 'graph> {
     pub fn new(
         file_path: &'graph PathBuf,
-        dependency_graph: &'visitor mut DependencyGraph<'graph>,
+        dependency_graph: &'visitor Arc<Mutex<DependencyGraph<'graph>>>,
     ) -> ImportVisitor<'visitor, 'graph> {
         return ImportVisitor {
             dependency_graph,
             file_path,
             errors: vec![],
         };
+    }
+
+    fn add_dependency(&mut self, dependency: &JsWord) {
+        self.dependency_graph.lock().unwrap().add_dependency(
+            self.file_path,
+            PathBuf::from_str(dependency).expect("Expected a valid path"),
+        );
     }
 
     fn get_dependency_for_call_like_expr(&mut self, kind: &str, expr: &mut CallExpr) {
@@ -36,9 +47,7 @@ impl<'visitor, 'graph> ImportVisitor<'visitor, 'graph> {
         } else {
             match &*expr.args[0].expr {
                 Expr::Lit(literal) => match literal {
-                    Lit::Str(str) => self
-                        .dependency_graph
-                        .add_dependency_jsword(self.file_path, &str.value),
+                    Lit::Str(str) => self.add_dependency(&str.value),
                     default => {
                         self.errors.push(format!(
                             "Expected a `{}` with exactly 1 string argument, found 1 {:?} arguments - in file {}",
@@ -70,14 +79,12 @@ impl<'visitor, 'graph> ImportVisitor<'visitor, 'graph> {
 impl<'visitor, 'graph> VisitMut for ImportVisitor<'visitor, 'graph> {
     // type T = import('a');
     fn visit_mut_ts_import_type(&mut self, expr: &mut TsImportType) {
-        self.dependency_graph
-            .add_dependency_jsword(self.file_path, &expr.arg.value);
+        self.add_dependency(&expr.arg.value);
     }
 
     // import foo from 'bar';
     fn visit_mut_import_decl(&mut self, expr: &mut ImportDecl) {
-        self.dependency_graph
-            .add_dependency_jsword(self.file_path, &expr.src.value);
+        self.add_dependency(&expr.src.value);
     }
 
     // import foo = ...;
@@ -87,31 +94,29 @@ impl<'visitor, 'graph> VisitMut for ImportVisitor<'visitor, 'graph> {
             TsModuleRef::TsEntityName(_) => {}
             // import foo = require('bar');
             //              ^^^^^^^^^^^^^^
-            TsModuleRef::TsExternalModuleRef(module_ref) => self
-                .dependency_graph
-                .add_dependency_jsword(self.file_path, &module_ref.expr.value),
+            TsModuleRef::TsExternalModuleRef(module_ref) => {
+                self.add_dependency(&module_ref.expr.value)
+            }
         }
     }
 
     // export * from 'bar';
     fn visit_mut_export_all(&mut self, expr: &mut ExportAll) {
-        self.dependency_graph
-            .add_dependency_jsword(self.file_path, &expr.src.value);
+        self.add_dependency(&expr.src.value);
     }
 
-    // export { foo }; -- we ignore this case
     // export { foo } from 'bar';
     fn visit_mut_named_export(&mut self, expr: &mut NamedExport) {
         match &expr.src {
-            Some(src) => self
-                .dependency_graph
-                .add_dependency_jsword(self.file_path, &src.value),
+            Some(src) => self.add_dependency(&src.value),
             None => {
-                // no source means it's local name only
+                // export { foo }; -- we ignore this case
             }
         }
     }
 
+    // import('foo')
+    // require('foo')
     fn visit_mut_call_expr(&mut self, expr: &mut CallExpr) {
         match &expr.callee {
             swc_ecma_ast::Callee::Import(_) => {
@@ -126,7 +131,7 @@ impl<'visitor, 'graph> VisitMut for ImportVisitor<'visitor, 'graph> {
                     }
                 }
                 _ => {
-                    // random require which we ignore
+                    // random call expression which we ignore
                 }
             },
             swc_ecma_ast::Callee::Super(_) => {

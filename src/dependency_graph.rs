@@ -2,10 +2,7 @@ use clean_path::Clean;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
-    str::FromStr,
 };
-
-use swc_atoms::JsWord;
 
 #[derive(Debug)]
 pub struct DependencyGraph<'map> {
@@ -18,12 +15,6 @@ impl<'map> DependencyGraph<'map> {
         };
     }
 
-    pub fn add_dependency_jsword(&mut self, owner: &'map PathBuf, dependency: &JsWord) {
-        self.add_dependency(
-            owner,
-            PathBuf::from_str(dependency).expect("Expected a valid path"),
-        );
-    }
     pub fn add_dependency(&mut self, owner: &'map PathBuf, dependency: PathBuf) {
         let resolved_dependency = if dependency.starts_with("../") || dependency.starts_with("./") {
             // dependency is a relative reference which we must resolve relative to the owner file
