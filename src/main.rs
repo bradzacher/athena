@@ -27,15 +27,21 @@ fn main() {
     let start = Instant::now();
     let graph = Arc::new(Mutex::new(DependencyGraph::new()));
     files.par_iter().for_each(|file| {
-        let graph = graph.clone();
-        let mut visitor = ImportVisitor::new(file, &graph);
+        let mut visitor = ImportVisitor::new();
         parse_file(file, &mut visitor);
+
         if !visitor.errors.is_empty() {
             eprintln!("Errors for file {}:\n{:#?}", file.display(), visitor.errors);
         }
+
+        let graph = graph.clone();
+        graph
+            .lock()
+            .unwrap()
+            .add_dependency(file, visitor.dependencies);
     });
     let duration: std::time::Duration = start.elapsed();
     eprintln!("Done in {:?}!", duration);
 
-    println!("{:#?}", graph);
+    // println!("{:#?}", graph);
 }

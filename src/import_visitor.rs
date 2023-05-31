@@ -1,8 +1,4 @@
-use std::{
-    path::PathBuf,
-    str::FromStr,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashSet, path::PathBuf, str::FromStr};
 
 use swc_atoms::{js_word, JsWord};
 use swc_ecma_ast::{
@@ -10,39 +6,29 @@ use swc_ecma_ast::{
 };
 use swc_ecma_visit::VisitMut;
 
-use crate::dependency_graph::DependencyGraph;
-
-pub struct ImportVisitor<'visitor, 'graph> {
-    dependency_graph: &'visitor Arc<Mutex<DependencyGraph<'graph>>>,
-    file_path: &'graph PathBuf,
+pub struct ImportVisitor {
     pub errors: Vec<String>,
+    pub dependencies: HashSet<PathBuf>,
 }
-impl<'visitor, 'graph> ImportVisitor<'visitor, 'graph> {
-    pub fn new(
-        file_path: &'graph PathBuf,
-        dependency_graph: &'visitor Arc<Mutex<DependencyGraph<'graph>>>,
-    ) -> ImportVisitor<'visitor, 'graph> {
+impl ImportVisitor {
+    pub fn new() -> ImportVisitor {
         return ImportVisitor {
-            dependency_graph,
-            file_path,
             errors: vec![],
+            dependencies: HashSet::new(),
         };
     }
 
     fn add_dependency(&mut self, dependency: &JsWord) {
-        self.dependency_graph.lock().unwrap().add_dependency(
-            self.file_path,
-            PathBuf::from_str(dependency).expect("Expected a valid path"),
-        );
+        self.dependencies
+            .insert(PathBuf::from_str(dependency).expect("Expected a valid path"));
     }
 
     fn get_dependency_for_call_like_expr(&mut self, kind: &str, expr: &mut CallExpr) {
         if expr.args.len() != 1 {
             self.errors.push(format!(
-                "Expected a `{}` with exactly 1 string argument, found {} arguments - in file {}",
+                "Expected a `{}` with exactly 1 string argument, found {} arguments",
                 kind,
                 expr.args.len(),
-                self.file_path.display()
             ));
         } else {
             match &*expr.args[0].expr {
@@ -50,33 +36,29 @@ impl<'visitor, 'graph> ImportVisitor<'visitor, 'graph> {
                     Lit::Str(str) => self.add_dependency(&str.value),
                     default => {
                         self.errors.push(format!(
-                            "Expected a `{}` with exactly 1 string argument, found 1 {:?} arguments - in file {}",
+                            "Expected a `{}` with exactly 1 string argument, found 1 {:?} arguments",
                             kind,
                             default,
-                            self.file_path.display()
                         ));
                     }
                 },
                 Expr::Ident(_) => {
                     self.errors.push(format!(
-                        "Found a dynamic `{}`, unable to resolve dependency - in file {}",
+                        "Found a dynamic `{}`, unable to resolve dependency",
                         kind,
-                        self.file_path.display()
                     ));
                 }
                 default => {
                     self.errors.push(format!(
-                        "Expected a `{}` with exactly 1 string argument, found 1 {:?} arguments - in file {}",
-                        kind,
-                        default,
-                        self.file_path.display()
+                        "Expected a `{}` with exactly 1 string argument, found 1 {:?} arguments",
+                        kind, default,
                     ));
                 }
             }
         }
     }
 }
-impl<'visitor, 'graph> VisitMut for ImportVisitor<'visitor, 'graph> {
+impl VisitMut for ImportVisitor {
     // type T = import('a');
     fn visit_mut_ts_import_type(&mut self, expr: &mut TsImportType) {
         self.add_dependency(&expr.arg.value);

@@ -15,30 +15,26 @@ impl<'map> DependencyGraph<'map> {
         };
     }
 
-    pub fn add_dependency(&mut self, owner: &'map PathBuf, dependency: PathBuf) {
-        let resolved_dependency = if dependency.starts_with("../") || dependency.starts_with("./") {
-            // dependency is a relative reference which we must resolve relative to the owner file
-            owner
-                .parent()
-                .expect("Path should not be the root")
-                .join(dependency)
-                .clean()
-        } else {
-            // path is a tsconfig path or a node_module
-            // TODO
-            dependency
-        };
+    pub fn add_dependency(&mut self, owner: &'map PathBuf, dependencies: HashSet<PathBuf>) {
+        let mut cleaned_dependencies: HashSet<PathBuf> = HashSet::new();
+        for dependency in dependencies {
+            cleaned_dependencies.insert(
+                if dependency.starts_with("../") || dependency.starts_with("./") {
+                    // dependency is a relative reference which we must resolve relative to the owner file
+                    owner
+                        .parent()
+                        .expect("Path should not be the root")
+                        .join(dependency)
+                        .clean()
+                } else {
+                    // path is a tsconfig path or a node_module
+                    // TODO
+                    dependency
+                },
+            );
+        }
 
-        let dependency_set: &mut HashSet<PathBuf> = match self.files_to_dependencies.get_mut(owner)
-        {
-            Some(set) => set,
-            None => {
-                self.files_to_dependencies.insert(owner, HashSet::new());
-                self.files_to_dependencies
-                    .get_mut(owner)
-                    .expect("Key must exist")
-            }
-        };
-        dependency_set.insert(resolved_dependency);
+        self.files_to_dependencies
+            .insert(owner, cleaned_dependencies);
     }
 }
