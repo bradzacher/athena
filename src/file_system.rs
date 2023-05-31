@@ -34,7 +34,13 @@ pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
                     if file_type.is_dir() {
                         continue;
                     }
-                    files.push(entry.path().to_owned());
+                    files.push(
+                        entry
+                            .path()
+                            .to_owned()
+                            .canonicalize()
+                            .expect("Expected a valid filename"),
+                    );
                 }
                 None => {
                     continue;
