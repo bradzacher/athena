@@ -1,6 +1,10 @@
 use clean_path::Clean;
-use ignore::{types::TypesBuilder, WalkBuilder};
-use std::{env, path::PathBuf};
+use ignore::{types::TypesBuilder, WalkBuilder, WalkState};
+use std::{
+    env,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use crate::cli::CliArgs;
 
@@ -24,28 +28,31 @@ pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
     }
     walk_builder.types(types);
 
-    let mut files: Vec<PathBuf> = vec![];
+    let files = Arc::new(Mutex::new(vec![]));
 
-    for result in walk_builder.build() {
-        // Each item yielded by the iterator is either a directory entry or an
-        // error, so either handle the path or the error.
-        match result {
-            Ok(entry) => match entry.file_type() {
-                Some(file_type) => {
-                    if file_type.is_dir() {
-                        continue;
+    walk_builder.build_parallel().run(|| {
+        let files = files.clone();
+        return Box::new(move |result| {
+            // Each item yielded by the iterator is either a directory entry or an
+            // error, so either handle the path or the error.
+            match result {
+                Ok(entry) => match entry.file_type() {
+                    Some(file_type) => {
+                        if !file_type.is_dir() {
+                            files.lock().unwrap().push(entry.path().to_owned().clean());
+                        }
                     }
-                    files.push(entry.path().to_owned().clean());
-                }
-                None => {
-                    continue;
-                }
-            },
-            Err(err) => println!("ERROR: {}", err),
-        };
-    }
+                    None => {
+                        // ignore non-file entries
+                    }
+                },
+                Err(err) => println!("ERROR: {}", err),
+            };
+            return WalkState::Continue;
+        });
+    });
 
-    return files;
+    return files.lock().unwrap().to_vec();
 }
 
 pub fn absolutize(path: PathBuf) -> PathBuf {

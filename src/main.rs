@@ -4,6 +4,8 @@ mod file_system;
 mod import_visitor;
 mod parser;
 
+use std::time::Instant;
+
 use crate::cli::parse_cli;
 use crate::dependency_graph::DependencyGraph;
 use crate::file_system::get_files;
@@ -14,10 +16,13 @@ fn main() {
     let args = parse_cli();
 
     eprintln!("Getting file list...");
+    let start = Instant::now();
     let files = get_files(args);
-    eprintln!("Found {} files", files.len());
+    let duration = start.elapsed();
+    eprintln!("Found {} files in {:?}", files.len(), duration);
 
     eprintln!("Calculating dependency graph...");
+    let start = Instant::now();
     let mut graph = DependencyGraph::new();
     for file in files.iter() {
         let mut visitor = ImportVisitor::new(file, &mut graph);
@@ -26,7 +31,8 @@ fn main() {
             eprintln!("Errors for file {}:\n{:#?}", file.display(), visitor.errors);
         }
     }
-    eprintln!("Done!");
+    let duration: std::time::Duration = start.elapsed();
+    eprintln!("Done in {:?}!", duration);
 
     println!("{:#?}", graph);
 }

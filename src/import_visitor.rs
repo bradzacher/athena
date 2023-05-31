@@ -84,7 +84,7 @@ impl<'visitor, 'graph> VisitMut for ImportVisitor<'visitor, 'graph> {
     fn visit_mut_ts_module_ref(&mut self, expr: &mut TsModuleRef) {
         match expr {
             // import foo = foo.bar; -- we ignore this case
-            TsModuleRef::TsEntityName(_) => (),
+            TsModuleRef::TsEntityName(_) => {}
             // import foo = require('bar');
             //              ^^^^^^^^^^^^^^
             TsModuleRef::TsExternalModuleRef(module_ref) => self
@@ -106,9 +106,9 @@ impl<'visitor, 'graph> VisitMut for ImportVisitor<'visitor, 'graph> {
             Some(src) => self
                 .dependency_graph
                 .add_dependency_jsword(self.file_path, &src.value),
-            None => (
+            None => {
                 // no source means it's local name only
-            ),
+            }
         }
     }
 
@@ -125,13 +125,13 @@ impl<'visitor, 'graph> VisitMut for ImportVisitor<'visitor, 'graph> {
                         self.get_dependency_for_call_like_expr("require", expr);
                     }
                 }
-                _ => (
+                _ => {
                     // random require which we ignore
-                ),
+                }
             },
-            swc_ecma_ast::Callee::Super(_) => (
+            swc_ecma_ast::Callee::Super(_) => {
                 // super call which we ignore
-            ),
+            }
         }
     }
 }
