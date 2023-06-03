@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
 use swc_atoms::{js_word, JsWord};
 use swc_ecma_ast::{
@@ -8,19 +8,21 @@ use swc_ecma_visit::VisitMut;
 
 pub struct ImportVisitor {
     pub errors: Vec<String>,
-    pub dependencies: HashSet<PathBuf>,
+    pub dependencies: Vec<PathBuf>,
 }
 impl ImportVisitor {
     pub fn new() -> ImportVisitor {
         return ImportVisitor {
             errors: vec![],
-            dependencies: HashSet::new(),
+            dependencies: vec![],
         };
     }
 
+    // TODO(bradzacher) - handle /// <ref>s?
+
     fn add_dependency(&mut self, dependency: &JsWord) {
         self.dependencies
-            .insert(PathBuf::from_str(dependency).expect("Expected a valid path"));
+            .push(PathBuf::from_str(dependency).expect("Expected a valid path"));
     }
 
     fn get_dependency_for_call_like_expr(&mut self, kind: &str, expr: &mut CallExpr) {
@@ -36,9 +38,19 @@ impl ImportVisitor {
                     Lit::Str(str) => self.add_dependency(&str.value),
                     default => {
                         self.errors.push(format!(
-                            "Expected a `{}` with exactly 1 string argument, found 1 {:?} arguments",
+                            "Expected a `{}` with exactly 1 string argument, found 1 {:?} literal arguments",
                             kind,
-                            default,
+                            // there's sadly no way to get the name of an enum in rust.
+                            // the debug print will also print struct contents (which makes the log output ugly)
+                            match default {
+                                Lit::Str(_) => "Str",
+                                Lit::Bool(_) => "Boolean",
+                                Lit::Null(_) => "Null",
+                                Lit::Num(_) => "Number",
+                                Lit::BigInt(_) => "BigInt",
+                                Lit::Regex(_) => "Regex",
+                                Lit::JSXText(_) => "JSXText",
+                            },
                         ));
                     }
                 },
@@ -51,7 +63,44 @@ impl ImportVisitor {
                 default => {
                     self.errors.push(format!(
                         "Expected a `{}` with exactly 1 string argument, found 1 {:?} arguments",
-                        kind, default,
+                        kind,
+                        // there's sadly no way to get the name of an enum in rust.
+                        // the debug print will also print struct contents (which makes the log output ugly)
+                        match default {
+                            Expr::This(_) => "This Expression",
+                            Expr::Array(_) => "Array Literal",
+                            Expr::Object(_) => "Object Literal",
+                            Expr::Fn(_) => "Function Expression",
+                            Expr::Unary(_) => "Unary Expression",
+                            Expr::Update(_) => "Update Expression",
+                            Expr::Bin(_) => "Binary Expression",
+                            Expr::Assign(_) => "Assignment Expression",
+                            Expr::Member(_) => "Member Expression",
+                            Expr::SuperProp(_) => "Super Expression",
+                            Expr::Cond(_) => "Ternary Expression",
+                            Expr::Call(_) => "Call Expression",
+                            Expr::New(_) => "New Expression",
+                            Expr::Seq(_) => "Sequence Expression",
+                            Expr::Tpl(_) => "Template Literal",
+                            Expr::TaggedTpl(_) => "Tagged Template Literal",
+                            Expr::Arrow(_) => "Arrow Function Expression",
+                            Expr::Class(_) => "Class Expression",
+                            Expr::Yield(_) => "Yield Expression",
+                            Expr::MetaProp(_) => "Meta Property Expression",
+                            Expr::Await(_) => "Await Expression",
+                            Expr::Paren(_) => "Parenthesis Expression",
+                            Expr::JSXNamespacedName(_) => "JSXNamespacedName",
+                            Expr::JSXElement(_) => "JSX",
+                            Expr::JSXFragment(_) => "JSX",
+                            Expr::TsTypeAssertion(_) => "Type Assertion",
+                            Expr::TsConstAssertion(_) => "Type Assertion",
+                            Expr::TsNonNull(_) => "NonNull Assertion",
+                            Expr::TsAs(_) => "Type Assertion",
+                            Expr::TsInstantiation(_) => "Instantiation Expression",
+                            Expr::TsSatisfies(_) => "Type Assertion",
+                            Expr::OptChain(_) => "Optional Chain Expression",
+                            _ => "Unknown",
+                        }
                     ));
                 }
             }

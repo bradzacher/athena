@@ -1,14 +1,11 @@
 use clean_path::Clean;
 use ignore::{types::TypesBuilder, WalkBuilder, WalkState};
 use std::{
-    env,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
-use crate::cli::CliArgs;
-
-pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
+pub fn get_files(paths: &Vec<PathBuf>) -> Vec<PathBuf> {
     let mut types_builder = TypesBuilder::new();
     types_builder
         .add("typescript", "*.{cts,mts,ts,tsx}")
@@ -20,10 +17,10 @@ pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
     types_builder.select("javascript");
     let types = types_builder.build().expect("Unable to build types");
 
-    let mut walk_builder = WalkBuilder::new(absolutize(PathBuf::from(&args.paths[0])));
-    if args.paths.len() > 1 {
-        for path in args.paths.iter().skip(1) {
-            walk_builder.add(absolutize(PathBuf::from(&path)));
+    let mut walk_builder = WalkBuilder::new(paths[0].to_owned());
+    if paths.len() > 1 {
+        for path in paths.iter().skip(1) {
+            walk_builder.add(path.to_owned());
         }
     }
     walk_builder.types(types);
@@ -75,11 +72,7 @@ pub fn get_files(args: CliArgs) -> Vec<PathBuf> {
     return files.lock().unwrap().to_vec();
 }
 
-pub fn absolutize(path: PathBuf) -> PathBuf {
-    if path.is_absolute() {
-        return path;
-    }
-    return env::current_dir()
-        .expect("Could not access current directory")
-        .join(path);
+pub fn is_declaration_file<P: AsRef<Path>>(path: P) -> bool {
+    let path = path.as_ref();
+    return path.ends_with(".d.ts") || path.ends_with(".d.mts") || path.ends_with(".d.cts");
 }

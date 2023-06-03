@@ -8,6 +8,8 @@ use swc_ecma_ast::{EsVersion, Program};
 use swc_ecma_parser::{lexer::Lexer, Capturing, Parser, StringInput, Syntax, TsConfig};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
 
+use crate::file_system::is_declaration_file;
+
 pub fn parse_file(path: &Path, visitor: &mut dyn VisitMut) {
     let cm: Lrc<SourceMap> = Default::default();
     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
@@ -25,7 +27,7 @@ pub fn parse_file(path: &Path, visitor: &mut dyn VisitMut) {
         Syntax::Typescript(TsConfig {
             tsx: extension == "tsx" || extension == "jsx",
             decorators: true,
-            dts: path.ends_with(".d.ts"),
+            dts: is_declaration_file(&path),
             no_early_errors: false,
             disallow_ambiguous_jsx_like: extension == "mts"
                 || extension == "cts"
