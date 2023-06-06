@@ -1,9 +1,7 @@
 use clean_path::Clean;
 use ignore::{types::TypesBuilder, WalkBuilder, WalkState};
-use std::{
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
+use parking_lot::Mutex;
+use std::{path::PathBuf, str::FromStr};
 
 pub fn get_files(paths: &Vec<PathBuf>) -> Vec<PathBuf> {
     let mut types_builder = TypesBuilder::new();
@@ -25,7 +23,8 @@ pub fn get_files(paths: &Vec<PathBuf>) -> Vec<PathBuf> {
     }
     walk_builder.types(types);
 
-    let files = Arc::new(Mutex::new(vec![]));
+    // no need for an Arc here because we know the closures will never outlive the function
+    let files = Mutex::new(vec![]);
 
     /*
     NOTE: we could implement this using a custom `.visit` implementation that defers any shared memory operations until
@@ -48,15 +47,14 @@ pub fn get_files(paths: &Vec<PathBuf>) -> Vec<PathBuf> {
       Range (min … max):   819.9 ms … 851.4 ms    10 runs
     */
     walk_builder.build_parallel().run(|| {
-        let files = files.clone();
-        return Box::new(move |result| {
+        return Box::new(|result| {
             // Each item yielded by the iterator is either a directory entry or an
             // error, so either handle the path or the error.
             match result {
                 Ok(entry) => match entry.file_type() {
                     Some(file_type) => {
                         if !file_type.is_dir() {
-                            files.lock().unwrap().push(entry.path().to_owned().clean());
+                            files.lock().push(entry.path().to_owned().clean());
                         }
                     }
                     None => {
@@ -69,10 +67,63 @@ pub fn get_files(paths: &Vec<PathBuf>) -> Vec<PathBuf> {
         });
     });
 
-    return files.lock().unwrap().to_vec();
+    return files.into_inner();
 }
 
-pub fn is_declaration_file<P: AsRef<Path>>(path: P) -> bool {
-    let path = path.as_ref();
+#[inline]
+pub fn is_declaration_file(path: &PathBuf) -> bool {
     return path.ends_with(".d.ts") || path.ends_with(".d.mts") || path.ends_with(".d.cts");
+}
+
+/// Ensures a path exists and converts it to an absolute representation
+pub fn path_parser_absolute(path: &str) -> Result<PathBuf, std::io::Error> {
+    return PathBuf::from_str(path)
+        .expect(&format!("Expected a valid path, got {}", path))
+        .canonicalize();
+}
+
+pub struct Extensions;
+impl Extensions {
+    // TS extensions
+    pub const TS: &str = "ts";
+    pub const D_TS: &str = "d.ts";
+    pub const TSX: &str = "tsx";
+    pub const CTS: &str = "cts";
+    pub const D_CTS: &str = "d.cts";
+    pub const MTS: &str = "mts";
+    pub const D_MTS: &str = "d.mts";
+
+    // JS extensions
+    pub const JS: &str = "js";
+    pub const JSX: &str = "jsx";
+    pub const CJS: &str = "cjs";
+    pub const MJS: &str = "mjs";
+
+    // Special code-like extensions
+    pub const CSS: &str = "css";
+    pub const EJS: &str = "ejs";
+    pub const JSON: &str = "json";
+
+    // Misc loaded files
+    pub const AVIF: &str = "avif";
+    pub const FRAG: &str = "frag";
+    pub const GIF: &str = "gif";
+    pub const HTML: &str = "html";
+    pub const JPG: &str = "jpg";
+    pub const M4A: &str = "m4a";
+    pub const MD: &str = "md";
+    pub const MP3: &str = "mp3";
+    pub const MP4: &str = "mp4";
+    pub const OGV: &str = "ogv";
+    pub const OTF: &str = "otf";
+    pub const PNG: &str = "png";
+    pub const SVG: &str = "svg";
+    pub const TXT: &str = "txt";
+    pub const TTF: &str = "ttf";
+    pub const VERT: &str = "vert";
+    pub const VTT: &str = "vtt";
+    pub const WASM: &str = "wasm";
+    pub const WEBM: &str = "webm";
+    pub const WOFF: &str = "woff";
+    pub const WOFF2: &str = "woff2";
 }

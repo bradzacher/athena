@@ -1,12 +1,7 @@
 use clap::{builder::ValueParser, Parser};
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-/// Ensures a path argument exists and converts it to an absolute representation
-fn path_parser_absolute(path: &str) -> Result<PathBuf, std::io::Error> {
-    return PathBuf::from_str(path)
-        .expect(&format!("Expected a valid path, got {}", path))
-        .canonicalize();
-}
+use crate::file_system::path_parser_absolute;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

@@ -19,6 +19,7 @@ impl ImportVisitor {
     }
 
     // TODO(bradzacher) - handle /// <ref>s?
+    // TODO(bradzacher) - catalogue `declare module 'mod'` as they create ambient node module declarations that are implicitly referenced
 
     fn add_dependency(&mut self, dependency: &JsWord) {
         self.dependencies

@@ -1,3 +1,4 @@
+mod cache;
 mod cli;
 mod dependency_graph;
 mod file_system;
@@ -73,32 +74,32 @@ fn main() {
         print_timer!("Done in {:?}", duration);
 
         let (mut graph, duration) = measure!(
-            "Preparing file -> module ID map",
-            DependencyGraph::new(&files)
+            "Preparing path -> module ID map",
+            DependencyGraph::new(&files, &tsconfig)
         );
         print_timer!("Done in {:?}", duration);
 
-        let ((resolution_errors, resolved_dependencies), duration) = measure!(
+        let (resolution_errors, duration) = measure!(
             "Resolving import strings and building dependency graph",
-            graph.resolve_imports(tsconfig, raw_dependencies)
+            graph.resolve_imports(&raw_dependencies)
         );
         if let Some(resolution_errors) = resolution_errors {
             for (file, errors) in resolution_errors.iter() {
-                eprintln!("❌ Errors for file {}:", file,);
+                eprintln!("❌ Errors for file {}:", file.display());
                 for error in errors {
                     eprintln!("❗️ {}", error);
                 }
                 eprintln!();
             }
         }
-
         print_timer!("Done in {:?}", duration);
 
-        let (_, duration) = measure!(
-            "Building dependency graph",
-            graph.add_all_modules(resolved_dependencies)
-        );
-        print_timer!("Done in {:?}", duration);
+        // let (result, duration) = measure!(
+        //     "Example query -> ",
+        //     graph.get_children(&path_parser_absolute("../../work/canva/web/src/services/content_management/marketing/automation/content_management_domain_marketing_automation_proto.ts").unwrap())
+        // );
+        // print_timer!("Found dependencies in {:?}:", duration);
+        // eprintln!("{:#?}", result.collect::<Vec<u32>>());
 
         // println!("{:#?}", graph);
     });
