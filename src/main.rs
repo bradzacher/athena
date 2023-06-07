@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use std::io;
 use std::time::Instant;
 
-use crate::cli::parse_cli;
+use crate::cli::{parse_cli, CliDirection};
 use crate::dependency_graph::DependencyGraph;
 use crate::file_system::{get_files, path_parser_absolute};
 use crate::import_visitor::ImportVisitor;
@@ -43,14 +43,13 @@ macro_rules! print_timer {
 }
 
 fn main() {
+    let args = parse_cli();
     let (graph, duration) = measure!("Preparing dependency graph", {
-        let args = parse_cli();
-
         let (tsconfig, duration) =
             measure!("Parsing tsconfig...", parse_tsconfig(&args.tsconfig_path));
         print_timer!("Parsed in {:?}", duration);
 
-        let (files, duration) = measure!("Getting file list...", get_files(&args.paths));
+        let (files, duration) = measure!("Getting file list...", get_files(&args.search_paths));
         print_timer!("Found {} files in {:?}", files.len(), duration);
 
         let mut raw_dependencies = Vec::with_capacity(files.len());
@@ -101,46 +100,60 @@ fn main() {
     });
     print_timer!("Graph built in {:?}", duration);
 
-    loop {
-        println!("Enter file path (relative or absolute):");
-        let file_input = match read_line() {
-            Some(l) => l,
-            None => return,
-        };
-
-        let direction: Direction;
+    if let Some(file) = args.file {
+        let direction = args.direction.unwrap_or(CliDirection::Outgoing);
+        let (maybe_dependencies, duration) = measure!(
+            "Fetching dependencies",
+            graph.get_all_dependencies(&file, direction.into())
+        );
+        match maybe_dependencies {
+            Ok(dependencies) => {
+                print_timer!("Done in {:?}:\n{:#?}", duration, dependencies)
+            }
+            Err(e) => println!("Error getting dependencies {:?}", e),
+        }
+    } else {
         loop {
-            println!("Enter direction - dependencies (0) or dependents (1):");
-            direction = match read_line() {
-                Some(l) => match l.as_str() {
-                    "0" | "dependencies" => Direction::Outgoing,
-                    "1" | "dependents" => Direction::Incoming,
-                    _ => continue,
-                },
+            println!("Enter file path (relative or absolute):");
+            let file_input = match read_line() {
+                Some(l) => l,
                 None => return,
             };
-            break;
-        }
 
-        match path_parser_absolute(&file_input) {
-            Ok(file) => {
-                let (maybe_dependencies, duration) = measure!(
-                    "Fetching dependencies",
-                    graph.get_all_dependencies(&file, direction)
-                );
-                match maybe_dependencies {
-                    Ok(dependencies) => {
-                        print_timer!("Done in {:?}:\n{:#?}", duration, dependencies)
+            let direction: Direction;
+            loop {
+                println!("Enter direction - dependencies (0) or dependents (1):");
+                direction = match read_line() {
+                    Some(l) => match l.as_str() {
+                        "0" | "dependencies" => Direction::Outgoing,
+                        "1" | "dependents" => Direction::Incoming,
+                        _ => continue,
+                    },
+                    None => return,
+                };
+                break;
+            }
+
+            match path_parser_absolute(&file_input) {
+                Ok(file) => {
+                    let (maybe_dependencies, duration) = measure!(
+                        "Fetching dependencies",
+                        graph.get_all_dependencies(&file, direction)
+                    );
+                    match maybe_dependencies {
+                        Ok(dependencies) => {
+                            print_timer!("Done in {:?}:\n{:#?}", duration, dependencies)
+                        }
+                        Err(e) => println!("Error getting dependencies {:?}", e),
                     }
-                    Err(e) => println!("Error getting dependencies {:?}", e),
+                }
+                Err(e) => {
+                    println!("Invalid path: {}", e);
                 }
             }
-            Err(e) => {
-                println!("Invalid path: {}", e);
-            }
-        }
 
-        println!();
+            println!();
+        }
     }
 }
 
