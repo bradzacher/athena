@@ -1,17 +1,18 @@
-mod cache;
 mod cli;
 mod dependency_graph;
+mod dependency_graph_store;
 mod file_system;
 mod import_visitor;
 mod parser;
 mod tsconfig;
 
 use rayon::prelude::*;
+use std::io;
 use std::time::Instant;
 
 use crate::cli::parse_cli;
 use crate::dependency_graph::DependencyGraph;
-use crate::file_system::get_files;
+use crate::file_system::{get_files, path_parser_absolute};
 use crate::import_visitor::ImportVisitor;
 use crate::parser::parse_file;
 use crate::tsconfig::parse_tsconfig;
@@ -40,7 +41,7 @@ macro_rules! print_timer {
 }
 
 fn main() {
-    let (_, duration) = measure!({
+    let (graph, duration) = measure!("Preparing dependency graph", {
         let args = parse_cli();
 
         let (tsconfig, duration) =
@@ -94,15 +95,31 @@ fn main() {
         }
         print_timer!("Done in {:?}", duration);
 
-        // let (result, duration) = measure!(
-        //     "Example query -> ",
-        //     graph.get_children(&path_parser_absolute("../../work/canva/web/src/services/content_management/marketing/automation/content_management_domain_marketing_automation_proto.ts").unwrap())
-        // );
-        // print_timer!("Found dependencies in {:?}:", duration);
-        // eprintln!("{:#?}", result.collect::<Vec<u32>>());
-
-        // println!("{:#?}", graph);
+        graph
     });
+    print_timer!("Graph built in {:?}", duration);
 
-    eprintln!("Completed in {:?}", duration);
+    println!("Enter file to get dependencies:");
+    let lines = io::stdin().lines();
+    for line in lines {
+        let line = line.unwrap();
+        match path_parser_absolute(&line) {
+            Ok(file) => {
+                let (maybe_dependencies, duration) =
+                    measure!("Fetching dependencies", graph.get_all_dependencies(&file));
+                match maybe_dependencies {
+                    Ok(dependencies) => {
+                        print_timer!("Done in {:?}:\n{:#?}", duration, dependencies)
+                    }
+                    Err(e) => println!("Error getting dependencies {:?}", e),
+                }
+            }
+            Err(e) => {
+                println!("Invalid path: {}", e);
+            }
+        }
+
+        println!();
+        println!("Enter file to get dependencies:");
+    }
 }

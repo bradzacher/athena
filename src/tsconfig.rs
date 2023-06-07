@@ -14,7 +14,7 @@ enum TSConfigExtends {
 #[serde(rename_all = "camelCase")]
 struct TSConfigCompilerOptions {
     base_url: Option<String>,
-    paths: Option<HashMap<String, String>>,
+    paths: Option<HashMap<String, Vec<String>>>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,7 +23,7 @@ struct TSConfigRaw {
     compiler_options: Option<TSConfigCompilerOptions>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct TSConfig {
     pub base_url: Option<PathBuf>,
     pub paths: Option<HashMap<String, PathBuf>>,
@@ -41,7 +41,7 @@ pub fn parse_tsconfig(base_path: &PathBuf) -> TSConfig {
         None => TSConfig::default(),
         Some(compiler_options) => {
             let base_url = &compiler_options.base_url;
-            return TSConfig {
+            TSConfig {
                 base_url: match base_url {
                     Some(base_url) => Some(base_path_parent.join(base_url).clean()),
                     None => None,
@@ -55,13 +55,25 @@ pub fn parse_tsconfig(base_path: &PathBuf) -> TSConfig {
                         Some(
                             paths
                                 .iter()
-                                .map(|(k, v)| (k.to_owned(), base.join(v).clean()))
+                                .map(|(k, v)| {
+                                    match v.len() {
+                                        0 => {
+                                            panic!("Found no path mappings for path key {}", k);
+                                        },
+                                        1 => {
+                                            return (k.to_owned(), base.join(&v[0]).clean());
+                                        }
+                                        _ => {
+                                            panic!("Multiple mapping paths is not currently supported for key {}", k);
+                                        }
+                                    }
+                                })
                                 .collect::<HashMap<String, PathBuf>>(),
                         )
                     }
                     None => None,
                 },
-            };
+            }
         }
     };
 
@@ -74,6 +86,7 @@ pub fn parse_tsconfig(base_path: &PathBuf) -> TSConfig {
                         .parent()
                         .expect("Should not be the root")
                         .join(parent_path)
+                        .clean()
                 } else {
                     panic!("Extending a tsconfig from node_modules is not currently supported");
                 };

@@ -34,14 +34,18 @@ impl Hash for Module {
 
 pub type ModuleID = usize;
 
-pub struct DependencyGraphCache {
+pub struct DependencyGraphStore {
     path_id_to_path: RwLock<Vec<PathBuf>>,
     path_to_path_id: RwLock<HashMap<PathBuf, PathID>>,
 
-    module_id_to_module: RwLock<Vec<Module>>,
+    pub module_id_to_module: RwLock<Vec<Module>>,
     path_id_to_module: RwLock<HashMap<PathID, Module>>,
 }
-impl DependencyGraphCache {
+impl DependencyGraphStore {
+    pub fn modules(&self) -> &RwLock<Vec<Module>> {
+        return &self.module_id_to_module;
+    }
+
     pub fn new(paths: &Vec<PathBuf>, tsconfig: &TSConfig) -> Self {
         let path_id_to_path = paths.iter().cloned().collect::<Vec<PathBuf>>();
         let path_to_path_id: HashMap<PathBuf, PathID> = paths
@@ -85,7 +89,7 @@ impl DependencyGraphCache {
 }
 
 // Path cache
-impl DependencyGraphCache {
+impl DependencyGraphStore {
     pub fn try_get_id_for_path(&self, path: &PathBuf) -> Option<PathID> {
         return self
             .path_to_path_id
@@ -114,7 +118,7 @@ impl DependencyGraphCache {
 }
 
 // Module cache
-impl DependencyGraphCache {
+impl DependencyGraphStore {
     fn resolve_paths(&self, tsconfig: &TSConfig) {
         let index_file_name = OsString::from_str("index").unwrap();
 
@@ -129,18 +133,7 @@ impl DependencyGraphCache {
             .map(|module| {
                 let path = self.get_path_for_id(&module.path_id);
 
-                let mut extra_paths = vec![
-                    // extension-less version which is the standard way to import things
-                    (
-                        if is_declaration_file(&path) {
-                            // you don't include the `.d`
-                            path.with_extension("").with_extension("")
-                        } else {
-                            path.with_extension("")
-                        },
-                        module,
-                    ),
-                ];
+                let mut extra_paths = vec![];
 
                 if let Some(base_url) = &tsconfig.base_url {
                     if let Ok(path_without_base) = path.strip_prefix(base_url) {
@@ -157,6 +150,17 @@ impl DependencyGraphCache {
                         module,
                     ))
                 }
+
+                // add extension-less variants for each of the extra paths
+                for i in 0..extra_paths.len() {
+                    let (extra_path, _) = &extra_paths[i];
+                    extra_paths.push(
+                        // extension-less version which is the standard way to import things
+                        (get_path_without_extension(&extra_path), module),
+                    );
+                }
+                // and an extension-less variant for the base path
+                extra_paths.push((get_path_without_extension(&path), module));
 
                 return extra_paths;
             })
@@ -308,9 +312,9 @@ impl DependencyGraphCache {
         return module.clone();
     }
 
-    // pub fn get_module_for_id(&self, id: ModuleID) -> Module {
-    //     return self.module_id_to_module.read()[id].clone();
-    // }
+    pub fn get_module_for_id(&self, id: &ModuleID) -> Module {
+        return self.module_id_to_module.read()[id.to_owned()].clone();
+    }
 }
 
 #[inline]
@@ -342,4 +346,14 @@ fn get_extension_precedence(path: &PathBuf) -> u8 {
         Extensions::MJS => 1,
         _ => 0,
     };
+}
+
+#[inline]
+fn get_path_without_extension(path: &PathBuf) -> PathBuf {
+    if is_declaration_file(&path) {
+        // you don't include the `.d`
+        return path.with_extension("").with_extension("");
+    } else {
+        return path.with_extension("");
+    }
 }
