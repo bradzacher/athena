@@ -1,11 +1,13 @@
 mod cli;
 mod dependency_graph;
 mod dependency_graph_store;
+mod depth_first_expansion;
 mod file_system;
 mod import_visitor;
 mod parser;
 mod tsconfig;
 
+use petgraph::Direction;
 use rayon::prelude::*;
 use std::io;
 use std::time::Instant;
@@ -99,14 +101,33 @@ fn main() {
     });
     print_timer!("Graph built in {:?}", duration);
 
-    println!("Enter file to get dependencies:");
-    let lines = io::stdin().lines();
-    for line in lines {
-        let line = line.unwrap();
-        match path_parser_absolute(&line) {
+    loop {
+        println!("Enter file path (relative or absolute):");
+        let file_input = match read_line() {
+            Some(l) => l,
+            None => return,
+        };
+
+        let direction: Direction;
+        loop {
+            println!("Enter direction - dependencies (0) or dependents (1):");
+            direction = match read_line() {
+                Some(l) => match l.as_str() {
+                    "0" | "dependencies" => Direction::Outgoing,
+                    "1" | "dependents" => Direction::Incoming,
+                    _ => continue,
+                },
+                None => return,
+            };
+            break;
+        }
+
+        match path_parser_absolute(&file_input) {
             Ok(file) => {
-                let (maybe_dependencies, duration) =
-                    measure!("Fetching dependencies", graph.get_all_dependencies(&file));
+                let (maybe_dependencies, duration) = measure!(
+                    "Fetching dependencies",
+                    graph.get_all_dependencies(&file, direction)
+                );
                 match maybe_dependencies {
                     Ok(dependencies) => {
                         print_timer!("Done in {:?}:\n{:#?}", duration, dependencies)
@@ -120,6 +141,15 @@ fn main() {
         }
 
         println!();
-        println!("Enter file to get dependencies:");
     }
+}
+
+fn read_line<'a>() -> Option<String> {
+    let mut line = String::new();
+    io::stdin().read_line(&mut line).expect("Valid input");
+    let line = line.trim();
+    if line == "q" {
+        return None;
+    }
+    return Some(line.to_owned());
 }

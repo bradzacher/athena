@@ -1,7 +1,11 @@
 use clean_path::Clean;
 use parking_lot::Mutex;
-use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::{
+    graph::{DiGraph, NodeIndex},
+    Direction,
+};
 use rayon::prelude::*;
+use spliter::ParallelSpliterator;
 use std::{
     collections::{HashMap, HashSet},
     fmt,
@@ -10,6 +14,7 @@ use std::{
 
 use crate::{
     dependency_graph_store::{DependencyGraphStore, Module, ModuleID},
+    depth_first_expansion::DepthFirstExpansion,
     file_system::Extensions,
     tsconfig::TSConfig,
 };
@@ -193,6 +198,7 @@ impl DependencyGraph {
     pub fn get_all_dependencies(
         &self,
         path: &PathBuf,
+        direction: Direction,
     ) -> Result<HashSet<PathBuf>, GetDependenciesError> {
         let graph_data = self.graph_data.as_ref().ok_or(GetDependenciesError::new(
             "Cannot call get_all_dependencies before resolve_imports",
@@ -204,18 +210,13 @@ impl DependencyGraph {
             .ok_or(GetDependenciesError::new(""))?
             .module_id;
 
-        let mut walker = graph_data
-            .graph
-            .neighbors(graph_data.module_id_to_node_idx[module_id])
-            .detach();
-        let mut modules: Vec<&ModuleID> = vec![];
-        while let Some(node) = walker.next_node(&graph_data.graph) {
-            modules.push(graph_data.graph.node_weight(node).unwrap());
-        }
+        let node_idx = graph_data.module_id_to_node_idx[module_id];
+        let dfe = DepthFirstExpansion::new(&graph_data.graph, direction, node_idx);
 
-        let paths = modules
-            .par_iter()
-            .map(|module_id| {
+        let paths = dfe
+            .par_split()
+            .map(|node_idx| {
+                let module_id = graph_data.graph.node_weight(node_idx).unwrap();
                 self.dependency_graph_store
                     .get_path_for_module(&self.dependency_graph_store.get_module_for_id(&module_id))
             })
@@ -227,6 +228,7 @@ impl DependencyGraph {
                 a.extend(b);
                 return a;
             });
+
         return Ok(paths);
     }
 }
