@@ -9,10 +9,11 @@ mod tsconfig;
 
 use petgraph::Direction;
 use rayon::prelude::*;
-use std::io;
+use std::fs::File;
+use std::io::{self, Write};
 use std::time::Instant;
 
-use crate::cli::{parse_cli, CliDirection};
+use crate::cli::parse_cli;
 use crate::dependency_graph::DependencyGraph;
 use crate::file_system::{get_files, path_parser_absolute};
 use crate::import_visitor::ImportVisitor;
@@ -81,6 +82,17 @@ fn main() {
         );
         print_timer!("Done in {:?}", duration);
 
+        if let Some(dump_resolved_imports) = args.dump_resolved_imports {
+            let json = serde_json::to_string(&raw_dependencies)
+                .expect("Unable to serialize resolved imports");
+            let mut file = File::create(&dump_resolved_imports).expect(&format!(
+                "Unable to open file {:?}",
+                dump_resolved_imports.display()
+            ));
+            file.write_all(json.as_bytes())
+                .expect("Unable to write resolved imports");
+        }
+
         let (resolution_errors, duration) = measure!(
             "Resolving import strings and building dependency graph",
             graph.resolve_imports(&raw_dependencies)
@@ -101,16 +113,23 @@ fn main() {
     print_timer!("Graph built in {:?}", duration);
 
     if let Some(file) = args.file {
-        let direction = args.direction.unwrap_or(CliDirection::Outgoing);
+        let direction = args.direction;
         let (maybe_dependencies, duration) = measure!(
             "Fetching dependencies",
             graph.get_all_dependencies(&file, direction.into())
         );
         match maybe_dependencies {
             Ok(dependencies) => {
-                print_timer!("Done in {:?}:\n{:#?}", duration, dependencies)
+                print_timer!(
+                    "Found {} dependencies in {:?}",
+                    dependencies.len(),
+                    duration
+                );
+                println!("{:#?}", dependencies);
             }
-            Err(e) => println!("Error getting dependencies {:?}", e),
+            Err(e) => {
+                println!("Error getting dependencies {:?}", e);
+            }
         }
     } else {
         loop {
@@ -142,9 +161,16 @@ fn main() {
                     );
                     match maybe_dependencies {
                         Ok(dependencies) => {
-                            print_timer!("Done in {:?}:\n{:#?}", duration, dependencies)
+                            print_timer!(
+                                "Found {} dependencies in {:?}",
+                                dependencies.len(),
+                                duration
+                            );
+                            println!("{:#?}", dependencies);
                         }
-                        Err(e) => println!("Error getting dependencies {:?}", e),
+                        Err(e) => {
+                            println!("Error getting dependencies {:?}", e);
+                        }
                     }
                 }
                 Err(e) => {

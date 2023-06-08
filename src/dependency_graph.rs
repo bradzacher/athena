@@ -212,6 +212,7 @@ impl DependencyGraph {
 
         let node_idx = graph_data.module_id_to_node_idx[module_id];
         let dfe = DepthFirstExpansion::new(&graph_data.graph, direction, node_idx);
+        let seen_nodes = dfe.seen_nodes.clone();
 
         let paths = dfe
             .par_split()
@@ -228,6 +229,18 @@ impl DependencyGraph {
                 a.extend(b);
                 return a;
             });
+
+        println!(
+            "{}, {}",
+            seen_nodes
+                .clone()
+                .read()
+                .iter()
+                .filter(|b| **b)
+                .collect::<Vec<_>>()
+                .len(),
+            paths.len()
+        );
 
         return Ok(paths);
     }

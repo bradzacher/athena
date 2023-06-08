@@ -39,6 +39,8 @@ pub struct DependencyGraphStore {
     path_to_path_id: RwLock<HashMap<PathBuf, PathID>>,
 
     pub module_id_to_module: RwLock<Vec<Module>>,
+    // note - we use a hashmap here on purpose. If this were a Vec, we'd need to keep its length in sync with
+    // path_id_to_path - which would double the number of resizes we need and substantially slow things down!
     path_id_to_module: RwLock<HashMap<PathID, Module>>,
 }
 impl DependencyGraphStore {
@@ -125,6 +127,9 @@ impl DependencyGraphStore {
         // in order to save ourselves doing path resolution later we instead want to register every valid path for a
         // given module ahead-of-time. This front-loads the effort as much as possible to reduce duplicate transforms
         // done when resolving imported names.
+
+        // TODO(bradzacher) - need to handle tsconfig paths
+        // TODO(bradzacher) - ban base_url folders as node modules
 
         self.module_id_to_module
             .read()

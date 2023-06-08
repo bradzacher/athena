@@ -15,7 +15,7 @@ pub struct DepthFirstExpansion<'a> {
     direction: Direction,
     graph: &'a Graph,
     stack: Vec<NodeIndex>,
-    seen_nodes: Arc<RwLock<Vec<bool>>>,
+    pub seen_nodes: Arc<RwLock<Vec<bool>>>,
 }
 
 impl<'a> DepthFirstExpansion<'a> {
@@ -36,16 +36,17 @@ impl<'a> Iterator for DepthFirstExpansion<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(node_idx) = self.stack.pop() {
             if self.seen_nodes.read()[node_idx.index()] {
-                return None;
+                return Some(node_idx);
             }
-
             self.seen_nodes.write().insert(node_idx.index(), true);
+
             self.stack
                 .extend(self.graph.neighbors_directed(node_idx, self.direction));
             return Some(node_idx);
-        } else {
-            return None;
         }
+
+        // the None return tells the iterator the iteration is finsihed to exit
+        return None;
     }
 }
 
