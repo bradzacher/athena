@@ -27,16 +27,23 @@ pub struct CliArgs {
     #[arg(required = true, num_args = 1.., value_parser = ValueParser::new(path_parser_absolute))]
     pub search_paths: Vec<PathBuf>,
 
-    /// The path to a tsconfig file to resolve `paths` and
+    /// The path to a tsconfig file to resolve `paths` and `baseUrl` from
     #[arg(long, short = 'p', required = true, value_parser = ValueParser::new(path_parser_absolute))]
     pub tsconfig_path: PathBuf,
 
-    #[arg(long, short, value_parser = ValueParser::new(path_parser_absolute))]
+    /// The file to analyze dependencies for
+    #[arg(long, short = 'f', value_parser = ValueParser::new(path_parser_absolute))]
     pub file: Option<PathBuf>,
 
-    #[arg(value_enum, long, short, default_value_t = CliDirection::Dependencies)]
+    /// The direction to get dependencies for the given file
+    #[arg(value_enum, long, short = 'd', default_value_t = CliDirection::Dependencies)]
     pub direction: CliDirection,
 
+    /// The maximum depth to expand dependencies along
+    #[arg(long, short = 'm', default_value_t = 0)]
+    pub max_depth: u32,
+
+    /// Dump the {file path -> imported name} list to a file for debug purposes
     #[arg(long)]
     pub dump_resolved_imports: Option<PathBuf>,
 }

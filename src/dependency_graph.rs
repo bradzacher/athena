@@ -199,6 +199,7 @@ impl DependencyGraph {
         &self,
         path: &PathBuf,
         direction: Direction,
+        max_depth: u32,
     ) -> Result<HashSet<PathBuf>, GetDependenciesError> {
         let graph_data = self.graph_data.as_ref().ok_or(GetDependenciesError::new(
             "Cannot call get_all_dependencies before resolve_imports",
@@ -211,8 +212,7 @@ impl DependencyGraph {
             .module_id;
 
         let node_idx = graph_data.module_id_to_node_idx[module_id];
-        let dfe = DepthFirstExpansion::new(&graph_data.graph, direction, node_idx);
-        let seen_nodes = dfe.seen_nodes.clone();
+        let dfe = DepthFirstExpansion::new(&graph_data.graph, direction, max_depth, node_idx);
 
         let paths = dfe
             .par_split()
@@ -229,18 +229,6 @@ impl DependencyGraph {
                 a.extend(b);
                 return a;
             });
-
-        println!(
-            "{}, {}",
-            seen_nodes
-                .clone()
-                .read()
-                .iter()
-                .filter(|b| **b)
-                .collect::<Vec<_>>()
-                .len(),
-            paths.len()
-        );
 
         return Ok(paths);
     }

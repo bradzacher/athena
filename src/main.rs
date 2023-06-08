@@ -116,7 +116,7 @@ fn main() {
         let direction = args.direction;
         let (maybe_dependencies, duration) = measure!(
             "Fetching dependencies",
-            graph.get_all_dependencies(&file, direction.into())
+            graph.get_all_dependencies(&file, direction.into(), args.max_depth)
         );
         match maybe_dependencies {
             Ok(dependencies) => {
@@ -157,7 +157,7 @@ fn main() {
                 Ok(file) => {
                     let (maybe_dependencies, duration) = measure!(
                         "Fetching dependencies",
-                        graph.get_all_dependencies(&file, direction)
+                        graph.get_all_dependencies(&file, direction, args.max_depth)
                     );
                     match maybe_dependencies {
                         Ok(dependencies) => {

@@ -11,21 +11,33 @@ use crate::dependency_graph_store::ModuleID;
 
 type Graph = DiGraph<ModuleID, ModuleID>;
 
+struct StackItem {
+    node_idx: NodeIndex,
+    depth: u32,
+}
+
 pub struct DepthFirstExpansion<'a> {
     direction: Direction,
     graph: &'a Graph,
-    stack: Vec<NodeIndex>,
-    pub seen_nodes: Arc<RwLock<Vec<bool>>>,
+    max_depth: u32,
+    stack: Vec<StackItem>,
+    seen_nodes: Arc<RwLock<Vec<bool>>>,
 }
 
 impl<'a> DepthFirstExpansion<'a> {
     /// Create a new search with the given starting point.
-    pub fn new(graph: &'a Graph, direction: Direction, node_idx: NodeIndex) -> Self {
+    pub fn new(
+        graph: &'a Graph,
+        direction: Direction,
+        max_depth: u32,
+        node_idx: NodeIndex,
+    ) -> Self {
         return Self {
             direction,
             graph,
+            max_depth,
             seen_nodes: Arc::new(RwLock::new(vec![false; graph.node_count()])),
-            stack: vec![node_idx],
+            stack: vec![StackItem { node_idx, depth: 0 }],
         };
     }
 }
@@ -34,15 +46,28 @@ impl<'a> Iterator for DepthFirstExpansion<'a> {
     type Item = NodeIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node_idx) = self.stack.pop() {
-            if self.seen_nodes.read()[node_idx.index()] {
-                return Some(node_idx);
+        if let Some(item) = self.stack.pop() {
+            if self.seen_nodes.read()[item.node_idx.index()] {
+                // already seen - don't expand
+                return Some(item.node_idx);
             }
-            self.seen_nodes.write().insert(node_idx.index(), true);
+            self.seen_nodes.write().insert(item.node_idx.index(), true);
 
-            self.stack
-                .extend(self.graph.neighbors_directed(node_idx, self.direction));
-            return Some(node_idx);
+            if self.max_depth > 0 && item.depth >= self.max_depth {
+                // hit max depth - don't expand further
+                return Some(item.node_idx);
+            }
+
+            let new_depth = item.depth + 1;
+            self.stack.extend(
+                self.graph
+                    .neighbors_directed(item.node_idx, self.direction)
+                    .map(|neighbor| StackItem {
+                        node_idx: neighbor,
+                        depth: new_depth,
+                    }),
+            );
+            return Some(item.node_idx);
         }
 
         // the None return tells the iterator the iteration is finsihed to exit
@@ -59,6 +84,7 @@ impl<'a> Spliterator for DepthFirstExpansion<'a> {
             return Some(Self {
                 direction: self.direction,
                 graph: &self.graph,
+                max_depth: self.max_depth,
                 seen_nodes: self.seen_nodes.clone(),
                 stack,
             });
