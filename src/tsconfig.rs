@@ -1,7 +1,11 @@
 use clean_path::Clean;
 use json_comments::StripComments;
 use serde::Deserialize;
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 // This obviously isn't the entire TSConfig spec - we only declare the subsets we actually care about
 #[derive(Deserialize)]
@@ -29,7 +33,7 @@ pub struct TSConfig {
     pub paths: Option<HashMap<String, PathBuf>>,
 }
 
-pub fn parse_tsconfig(base_path: &PathBuf) -> TSConfig {
+pub fn parse_tsconfig(base_path: &Path) -> TSConfig {
     let raw_json_with_comments = std::fs::read_to_string(base_path)
         .expect(&format!("Unable to read tsconfig {}", base_path.display()));
     let raw_json = StripComments::new(raw_json_with_comments.as_bytes());

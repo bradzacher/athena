@@ -7,9 +7,9 @@ use petgraph::{
 };
 use spliter::Spliterator;
 
-use crate::dependency_graph_store::ModuleID;
+use crate::dependency_graph_store::ModuleId;
 
-type Graph = DiGraph<ModuleID, ModuleID>;
+type Graph = DiGraph<ModuleId, ModuleId>;
 
 struct StackItem {
     node_idx: NodeIndex,

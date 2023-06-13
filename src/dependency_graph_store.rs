@@ -5,21 +5,21 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     hash::{Hash, Hasher},
-    path::{Component, PathBuf},
+    path::{Component, Path, PathBuf},
     str::FromStr,
 };
 
 use crate::{
-    file_system::{is_declaration_file, Extensions},
+    file_system::{extensions, is_declaration_file},
     tsconfig::TSConfig,
 };
 
-pub type PathID = usize;
+pub type PathId = usize;
 
 #[derive(Clone, Copy, Eq)]
 pub struct Module {
-    path_id: PathID,
-    pub module_id: ModuleID,
+    path_id: PathId,
+    pub module_id: ModuleId,
 }
 impl PartialEq<Module> for Module {
     fn eq(&self, other: &Module) -> bool {
@@ -32,16 +32,16 @@ impl Hash for Module {
     }
 }
 
-pub type ModuleID = usize;
+pub type ModuleId = usize;
 
 pub struct DependencyGraphStore {
     path_id_to_path: RwLock<Vec<PathBuf>>,
-    path_to_path_id: RwLock<HashMap<PathBuf, PathID>>,
+    path_to_path_id: RwLock<HashMap<PathBuf, PathId>>,
 
     pub module_id_to_module: RwLock<Vec<Module>>,
     // note - we use a hashmap here on purpose. If this were a Vec, we'd need to keep its length in sync with
     // path_id_to_path - which would double the number of resizes we need and substantially slow things down!
-    path_id_to_module: RwLock<HashMap<PathID, Module>>,
+    path_id_to_module: RwLock<HashMap<PathId, Module>>,
 }
 impl DependencyGraphStore {
     pub fn modules(&self) -> &RwLock<Vec<Module>> {
@@ -50,11 +50,11 @@ impl DependencyGraphStore {
 
     pub fn new(paths: &Vec<PathBuf>, tsconfig: &TSConfig) -> Self {
         let path_id_to_path = paths.iter().cloned().collect::<Vec<PathBuf>>();
-        let path_to_path_id: HashMap<PathBuf, PathID> = paths
+        let path_to_path_id: HashMap<PathBuf, PathId> = paths
             .par_iter()
             .enumerate()
             .map(|(id, path)| (path.to_owned(), id))
-            .collect::<HashMap<PathBuf, PathID>>();
+            .collect::<HashMap<PathBuf, PathId>>();
 
         let mut module_id_to_module = Vec::with_capacity(paths.len());
         path_id_to_path
@@ -71,7 +71,7 @@ impl DependencyGraphStore {
         let path_id_to_module = module_id_to_module
             .par_iter()
             .map(|module| (module.path_id, module.clone()))
-            .collect::<HashMap<PathID, Module>>();
+            .collect::<HashMap<PathId, Module>>();
 
         let path_id_to_path = RwLock::new(path_id_to_path);
         let path_to_path_id = RwLock::new(path_to_path_id);
@@ -92,7 +92,7 @@ impl DependencyGraphStore {
 
 // Path cache
 impl DependencyGraphStore {
-    pub fn try_get_id_for_path(&self, path: &PathBuf) -> Option<PathID> {
+    pub fn try_get_id_for_path(&self, path: &Path) -> Option<PathId> {
         return self
             .path_to_path_id
             .read()
@@ -100,7 +100,7 @@ impl DependencyGraphStore {
             .and_then(|id| Some(id.to_owned()));
     }
 
-    pub fn get_id_for_path(&self, path: &PathBuf) -> PathID {
+    pub fn get_id_for_path(&self, path: &Path) -> PathId {
         if let Some(id) = self.path_to_path_id.read().get(path) {
             return id.to_owned();
         }
@@ -114,7 +114,7 @@ impl DependencyGraphStore {
         return new_id;
     }
 
-    pub fn get_path_for_id(&self, id: &PathID) -> PathBuf {
+    pub fn get_path_for_id(&self, id: &PathId) -> PathBuf {
         return self.path_id_to_path.read()[id.to_owned()].clone();
     }
 }
@@ -238,7 +238,7 @@ impl DependencyGraphStore {
             });
     }
 
-    pub fn add_node_module(&self, path: &PathBuf) -> Module {
+    pub fn add_node_module(&self, path: &Path) -> Module {
         // we just want the top-level node module name, not the deep path
         // eg we don't care that `A -> mod/foo` and `B -> mod/bar`, we just care that `(A, B) -> mod`
         let module_name = {
@@ -287,7 +287,7 @@ impl DependencyGraphStore {
         return self.get_path_for_id(&module.path_id);
     }
 
-    pub fn try_get_module_for_path(&self, path: &PathBuf) -> Option<Module> {
+    pub fn try_get_module_for_path(&self, path: &Path) -> Option<Module> {
         return self
             .path_id_to_module
             .read()
@@ -295,7 +295,7 @@ impl DependencyGraphStore {
             .and_then(|m| Some(m.clone()));
     }
 
-    fn get_module_for_path(&self, path: &PathBuf) -> Module {
+    fn get_module_for_path(&self, path: &Path) -> Module {
         let path_id = self.get_id_for_path(path);
 
         if let Some(module) = self.path_id_to_module.read().get(&path_id) {
@@ -317,44 +317,42 @@ impl DependencyGraphStore {
         return module.clone();
     }
 
-    pub fn get_module_for_id(&self, id: &ModuleID) -> Module {
+    pub fn get_module_for_id(&self, id: &ModuleId) -> Module {
         return self.module_id_to_module.read()[id.to_owned()].clone();
     }
 }
 
-#[inline]
-fn get_extension_precedence(path: &PathBuf) -> u8 {
+fn get_extension_precedence(path: &Path) -> u8 {
     let mut extension = path.extension().unwrap().to_str().unwrap();
     if is_declaration_file(path) {
-        if extension == Extensions::TS {
-            extension = Extensions::D_TS;
-        } else if extension == Extensions::CTS {
-            extension = Extensions::D_CTS;
-        } else if extension == Extensions::MTS {
-            extension = Extensions::D_MTS;
+        if extension == extensions::TS {
+            extension = extensions::D_TS;
+        } else if extension == extensions::CTS {
+            extension = extensions::D_CTS;
+        } else if extension == extensions::MTS {
+            extension = extensions::D_MTS;
         }
     }
 
     // https://github.com/microsoft/TypeScript/blob/f0ff97611f2e9c8aff208f4b6520489fe387e9ab/src/compiler/utilities.ts#L9171
     // ['ts', 'tsx', 'd.ts', 'js', 'jsx', 'cts', 'd.cts', 'cjs', 'mts', 'd.mts', 'mjs']
     return match extension {
-        Extensions::TS => 11,
-        Extensions::TSX => 10,
-        Extensions::D_TS => 9,
-        Extensions::JS => 8,
-        Extensions::JSX => 7,
-        Extensions::CTS => 6,
-        Extensions::D_CTS => 5,
-        Extensions::CJS => 4,
-        Extensions::MTS => 3,
-        Extensions::D_MTS => 2,
-        Extensions::MJS => 1,
+        extensions::TS => 11,
+        extensions::TSX => 10,
+        extensions::D_TS => 9,
+        extensions::JS => 8,
+        extensions::JSX => 7,
+        extensions::CTS => 6,
+        extensions::D_CTS => 5,
+        extensions::CJS => 4,
+        extensions::MTS => 3,
+        extensions::D_MTS => 2,
+        extensions::MJS => 1,
         _ => 0,
     };
 }
 
-#[inline]
-fn get_path_without_extension(path: &PathBuf) -> PathBuf {
+fn get_path_without_extension(path: &Path) -> PathBuf {
     if is_declaration_file(&path) {
         // you don't include the `.d`
         return path.with_extension("").with_extension("");

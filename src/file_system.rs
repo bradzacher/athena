@@ -1,7 +1,10 @@
 use clean_path::Clean;
 use ignore::{types::TypesBuilder, WalkBuilder, WalkState};
 use parking_lot::Mutex;
-use std::{path::PathBuf, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 pub fn get_files(paths: &Vec<PathBuf>) -> Vec<PathBuf> {
     let mut types_builder = TypesBuilder::new();
@@ -70,8 +73,7 @@ pub fn get_files(paths: &Vec<PathBuf>) -> Vec<PathBuf> {
     return files.into_inner();
 }
 
-#[inline]
-pub fn is_declaration_file(path: &PathBuf) -> bool {
+pub fn is_declaration_file(path: &Path) -> bool {
     return path.ends_with(".d.ts") || path.ends_with(".d.mts") || path.ends_with(".d.cts");
 }
 
@@ -82,8 +84,7 @@ pub fn path_parser_absolute(path: &str) -> Result<PathBuf, std::io::Error> {
         .canonicalize();
 }
 
-pub struct Extensions;
-impl Extensions {
+pub mod extensions {
     // TS extensions
     pub const TS: &str = "ts";
     pub const D_TS: &str = "d.ts";

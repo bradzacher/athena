@@ -7,15 +7,15 @@ use crate::file_system::path_parser_absolute;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum CliDirection {
     /// Get the dependencies (outgoing imports) of the given module
-    Dependencies = 0,
+    Dependencies,
     /// Get the dependents (incoming imports) of the given module
-    Dependents = 1,
+    Dependents,
 }
-impl Into<Direction> for CliDirection {
-    fn into(self) -> Direction {
-        return match self {
-            Self::Dependents => Direction::Incoming,
-            Self::Dependencies => Direction::Outgoing,
+impl From<CliDirection> for Direction {
+    fn from(value: CliDirection) -> Direction {
+        return match value {
+            CliDirection::Dependents => Direction::Incoming,
+            CliDirection::Dependencies => Direction::Outgoing,
         };
     }
 }

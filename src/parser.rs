@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::path::Path;
+
 use swc_common::{
     errors::{ColorConfig, Handler},
     sync::Lrc,
@@ -8,9 +9,9 @@ use swc_ecma_ast::{EsVersion, Program};
 use swc_ecma_parser::{lexer::Lexer, Capturing, Parser, StringInput, Syntax, TsConfig};
 use swc_ecma_visit::{VisitMut, VisitMutWith};
 
-use crate::file_system::{is_declaration_file, Extensions};
+use crate::file_system::{extensions, is_declaration_file};
 
-pub fn parse_file(path: &PathBuf, visitor: &mut dyn VisitMut) {
+pub fn parse_file(path: &Path, visitor: &mut dyn VisitMut) {
     let cm: Lrc<SourceMap> = Default::default();
     let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
 
@@ -22,14 +23,14 @@ pub fn parse_file(path: &PathBuf, visitor: &mut dyn VisitMut) {
 
     let lexer = Lexer::new(
         Syntax::Typescript(TsConfig {
-            tsx: extension == Extensions::TSX || extension == Extensions::JSX,
+            tsx: extension == extensions::TSX || extension == extensions::JSX,
             decorators: true,
             dts: is_declaration_file(&path),
             no_early_errors: false,
-            disallow_ambiguous_jsx_like: extension == Extensions::MTS
-                || extension == Extensions::CTS
-                || extension == Extensions::MJS
-                || extension == Extensions::CJS,
+            disallow_ambiguous_jsx_like: extension == extensions::MTS
+                || extension == extensions::CTS
+                || extension == extensions::MJS
+                || extension == extensions::CJS,
         }),
         EsVersion::latest(),
         StringInput::from(&*fm),
