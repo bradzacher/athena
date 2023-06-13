@@ -1,5 +1,3 @@
-use parking_lot::RwLock;
-use rayon::prelude::*;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -35,30 +33,29 @@ impl Hash for Module {
 pub type ModuleId = usize;
 
 pub struct DependencyGraphStore {
-    path_id_to_path: RwLock<Vec<PathBuf>>,
-    path_to_path_id: RwLock<HashMap<PathBuf, PathId>>,
+    path_id_to_path: Vec<PathBuf>,
+    path_to_path_id: HashMap<PathBuf, PathId>,
 
-    pub module_id_to_module: RwLock<Vec<Module>>,
+    pub module_id_to_module: Vec<Module>,
     // note - we use a hashmap here on purpose. If this were a Vec, we'd need to keep its length in sync with
     // path_id_to_path - which would double the number of resizes we need and substantially slow things down!
-    path_id_to_module: RwLock<HashMap<PathId, Module>>,
+    path_id_to_module: HashMap<PathId, Module>,
 }
 impl DependencyGraphStore {
-    pub fn modules(&self) -> &RwLock<Vec<Module>> {
+    pub fn modules(&self) -> &Vec<Module> {
         return &self.module_id_to_module;
     }
 
     pub fn new(paths: &Vec<PathBuf>, tsconfig: &TSConfig) -> Self {
         let path_id_to_path = paths.iter().cloned().collect::<Vec<PathBuf>>();
         let path_to_path_id: HashMap<PathBuf, PathId> = paths
-            .par_iter()
+            .iter()
             .enumerate()
             .map(|(id, path)| (path.to_owned(), id))
             .collect::<HashMap<PathBuf, PathId>>();
 
-        let mut module_id_to_module = Vec::with_capacity(paths.len());
-        path_id_to_path
-            .par_iter()
+        let module_id_to_module = path_id_to_path
+            .iter()
             .enumerate()
             .map(|(id, _)| {
                 return Module {
@@ -66,21 +63,17 @@ impl DependencyGraphStore {
                     module_id: id,
                 };
             })
-            .collect_into_vec(&mut module_id_to_module);
+            .collect::<Vec<_>>();
 
         let path_id_to_module = module_id_to_module
-            .par_iter()
+            .iter()
             .map(|module| (module.path_id, module.clone()))
             .collect::<HashMap<PathId, Module>>();
 
-        let path_id_to_path = RwLock::new(path_id_to_path);
-        let path_to_path_id = RwLock::new(path_to_path_id);
-        let path_id_to_module = RwLock::new(path_id_to_module);
-
-        let module_cache = Self {
+        let mut module_cache = Self {
             path_id_to_path,
             path_to_path_id,
-            module_id_to_module: RwLock::new(module_id_to_module),
+            module_id_to_module,
             path_id_to_module,
         };
 
@@ -95,33 +88,32 @@ impl DependencyGraphStore {
     pub fn try_get_id_for_path(&self, path: &Path) -> Option<PathId> {
         return self
             .path_to_path_id
-            .read()
             .get(path)
             .and_then(|id| Some(id.to_owned()));
     }
 
-    pub fn get_id_for_path(&self, path: &Path) -> PathId {
-        if let Some(id) = self.path_to_path_id.read().get(path) {
+    pub fn get_id_for_path(&mut self, path: &Path) -> PathId {
+        if let Some(id) = self.path_to_path_id.get(path) {
             return id.to_owned();
         }
 
-        let mut paths = self.path_id_to_path.write();
+        let paths = &mut self.path_id_to_path;
         let new_id = paths.len();
         paths.push(path.to_owned());
 
-        self.path_to_path_id.write().insert(path.to_owned(), new_id);
+        self.path_to_path_id.insert(path.to_owned(), new_id);
 
         return new_id;
     }
 
     pub fn get_path_for_id(&self, id: &PathId) -> PathBuf {
-        return self.path_id_to_path.read()[id.to_owned()].clone();
+        return self.path_id_to_path[id.to_owned()].clone();
     }
 }
 
 // Module cache
 impl DependencyGraphStore {
-    fn resolve_paths(&self, tsconfig: &TSConfig) {
+    fn resolve_paths(&mut self, tsconfig: &TSConfig) {
         let index_file_name = OsString::from_str("index").unwrap();
 
         // in order to save ourselves doing path resolution later we instead want to register every valid path for a
@@ -131,9 +123,9 @@ impl DependencyGraphStore {
         // TODO(bradzacher) - need to handle tsconfig paths
         // TODO(bradzacher) - ban base_url folders as node modules
 
-        self.module_id_to_module
-            .read()
-            .par_iter()
+        let path_to_potential_module_iter = self
+            .module_id_to_module
+            .iter()
             // First we generate all possible non-relative import names for each module
             .map(|module| {
                 let path = self.get_path_for_id(&module.path_id);
@@ -142,7 +134,7 @@ impl DependencyGraphStore {
 
                 if let Some(base_url) = &tsconfig.base_url {
                     if let Ok(path_without_base) = path.strip_prefix(base_url) {
-                        extra_paths.push((path_without_base.to_path_buf(), module));
+                        extra_paths.push((path_without_base.to_path_buf(), module.clone()));
                     }
                 }
 
@@ -152,7 +144,7 @@ impl DependencyGraphStore {
                         path.parent()
                             .expect("Should not be the parent")
                             .to_path_buf(),
-                        module,
+                        module.clone(),
                     ))
                 }
 
@@ -161,43 +153,24 @@ impl DependencyGraphStore {
                     let (extra_path, _) = &extra_paths[i];
                     extra_paths.push(
                         // extension-less version which is the standard way to import things
-                        (get_path_without_extension(&extra_path), module),
+                        (get_path_without_extension(&extra_path), module.clone()),
                     );
                 }
                 // and an extension-less variant for the base path
-                extra_paths.push((get_path_without_extension(&path), module));
+                extra_paths.push((get_path_without_extension(&path), module.clone()));
 
                 return extra_paths;
             })
             .flatten()
             // then we group the modules by path
-            .fold(
-                HashMap::new,
-                |mut acc: HashMap<PathBuf, Vec<&Module>>, (path, module)| {
-                    if let Some(list) = acc.get_mut(&path) {
-                        list.push(module);
-                    } else {
-                        acc.insert(path, vec![module]);
-                    }
-                    return acc;
-                },
-            )
-            .reduce(
-                HashMap::new,
-                |mut acc: HashMap<PathBuf, Vec<&Module>>, other| {
-                    for (path, modules) in other.iter() {
-                        if let Some(list) = acc.get_mut(path) {
-                            list.append(&mut modules.clone());
-                        } else {
-                            acc.insert(path.to_owned(), modules.clone());
-                        }
-                    }
-                    return acc;
-                },
-            )
-            // we now have a map of {path -> potential modules} - next step we need to determine the best module in order to
-            // be left with just one module per path.
-            .par_iter()
+            .fold(HashMap::new(), |mut acc, (path, module)| {
+                acc.entry(path).or_insert(Vec::new()).push(module);
+                return acc;
+            });
+        // we now have a map of {path -> potential modules} - next step we need to determine the best module in order to
+        // be left with just one module per path.
+        let best_module_per_path = path_to_potential_module_iter
+            .iter()
             .map(|(path, modules)| {
                 match modules.len() {
                     1 => {
@@ -230,15 +203,15 @@ impl DependencyGraphStore {
                     }
                 };
             })
-            .for_each(|(path, module)| {
-                let path_id = self.get_id_for_path(&path);
-                self.path_id_to_module
-                    .write()
-                    .insert(path_id, module.clone());
-            });
+            .collect::<Vec<_>>();
+
+        for (path, module) in best_module_per_path {
+            let path_id = self.get_id_for_path(&path);
+            self.path_id_to_module.insert(path_id, module.clone());
+        }
     }
 
-    pub fn add_node_module(&self, path: &Path) -> Module {
+    pub fn add_node_module(&mut self, path: &Path) -> Module {
         // we just want the top-level node module name, not the deep path
         // eg we don't care that `A -> mod/foo` and `B -> mod/bar`, we just care that `(A, B) -> mod`
         let module_name = {
@@ -276,9 +249,7 @@ impl DependencyGraphStore {
 
         // for future lookups we also want to include the mapping from the deep import path
         let path_id = self.get_id_for_path(path);
-        self.path_id_to_module
-            .write()
-            .insert(path_id, module.clone());
+        self.path_id_to_module.insert(path_id, module.clone());
 
         return module;
     }
@@ -290,35 +261,31 @@ impl DependencyGraphStore {
     pub fn try_get_module_for_path(&self, path: &Path) -> Option<Module> {
         return self
             .path_id_to_module
-            .read()
             .get(&self.try_get_id_for_path(path)?)
             .and_then(|m| Some(m.clone()));
     }
 
-    fn get_module_for_path(&self, path: &Path) -> Module {
+    fn get_module_for_path(&mut self, path: &Path) -> Module {
         let path_id = self.get_id_for_path(path);
 
-        if let Some(module) = self.path_id_to_module.read().get(&path_id) {
+        if let Some(module) = self.path_id_to_module.get(&path_id) {
             return module.clone();
         }
 
-        let mut modules = self.module_id_to_module.write();
-        let new_id = modules.len();
-        modules.push(Module {
+        let new_id = self.module_id_to_module.len();
+        self.module_id_to_module.push(Module {
             path_id,
             module_id: new_id,
         });
-        let module = &modules[new_id];
+        let module = &self.module_id_to_module[new_id];
 
-        self.path_id_to_module
-            .write()
-            .insert(path_id, module.clone());
+        self.path_id_to_module.insert(path_id, module.clone());
 
         return module.clone();
     }
 
     pub fn get_module_for_id(&self, id: &ModuleId) -> Module {
-        return self.module_id_to_module.read()[id.to_owned()].clone();
+        return self.module_id_to_module[id.to_owned()].clone();
     }
 }
 

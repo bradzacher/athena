@@ -1,5 +1,4 @@
 use clean_path::Clean;
-use parking_lot::Mutex;
 use petgraph::{
     graph::{DiGraph, NodeIndex},
     Direction,
@@ -58,8 +57,8 @@ impl DependencyGraph {
     }
 
     fn resolve_dependencies_for_module(
-        &self,
-        resolution_errors: &Mutex<Vec<ResolutionError>>,
+        &mut self,
+        resolution_errors: &mut Vec<ResolutionError>,
         owner_path: &PathBuf,
         dependencies: &Vec<PathBuf>,
     ) -> Vec<(ModuleId, ModuleId)> {
@@ -112,7 +111,7 @@ impl DependencyGraph {
                         return Some((owner.module_id.to_owned(), resolved_dependency.module_id.to_owned()));
                     }
 
-                    resolution_errors.lock().push(ResolutionError {
+                    resolution_errors.push(ResolutionError {
                         module: owner,
                         message: format!(
                             "Unable to resolve relative import \"{}\" to an existing module, tried \"{}\"",
@@ -145,19 +144,22 @@ impl DependencyGraph {
         raw_dependencies: &[(&PathBuf, Vec<PathBuf>)],
     ) -> Option<ImportResolutionErrors> {
         // tracks the resolution errors we encounter
-        let resolution_errors: Mutex<Vec<ResolutionError>> = Mutex::new(vec![]);
+        let mut resolution_errors: Vec<ResolutionError> = vec![];
 
         let resolved_dependencies: Vec<(ModuleId, ModuleId)> = raw_dependencies
-            .par_iter()
+            .iter()
             .map(|(owner_path, dependencies)| {
-                self.resolve_dependencies_for_module(&resolution_errors, owner_path, dependencies)
+                return self.resolve_dependencies_for_module(
+                    &mut resolution_errors,
+                    owner_path,
+                    dependencies,
+                );
             })
             .flatten()
-            .collect::<Vec<_>>();
+            .collect();
 
         // collect the errors
         let resolution_errors = {
-            let resolution_errors = resolution_errors.lock();
             if resolution_errors.is_empty() {
                 None
             } else {
@@ -176,7 +178,7 @@ impl DependencyGraph {
         };
 
         // add the resolved dependency graph to the backing graph
-        let modules = self.dependency_graph_store.modules().read();
+        let modules = self.dependency_graph_store.modules();
         let module_count = modules.len();
         let mut graph: DiGraph<ModuleId, ModuleId> =
             DiGraph::with_capacity(module_count, resolved_dependencies.len());
