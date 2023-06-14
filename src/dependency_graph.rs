@@ -14,14 +14,16 @@ use crate::{
     dependency_graph_store::DependencyGraphStore,
     depth_first_expansion::DepthFirstExpansion,
     file_system::extensions,
-    module::{Module, ModuleId},
+    module::{EdgeWeight, Module, ModuleGraph, ModuleId},
     tsconfig::TSConfig,
 };
 
 type ImportResolutionErrors = HashMap<PathBuf, Vec<String>>;
 
+// these two pieces of data are intrinsically linked and will either both exist or not exist
+// hence they sit on a separate struct, rather than directly on DependencyGraph
 struct GraphData {
-    graph: DiGraph<ModuleId, ModuleId>,
+    graph: ModuleGraph,
     module_id_to_node_idx: Vec<NodeIndex>,
 }
 
@@ -163,7 +165,7 @@ impl DependencyGraph {
         // add the resolved dependency graph to the backing graph
         let modules = self.dependency_graph_store.modules();
         let module_count = modules.len();
-        let mut graph: DiGraph<ModuleId, ModuleId> =
+        let mut graph: ModuleGraph =
             DiGraph::with_capacity(module_count, resolved_dependencies.len());
         let mut module_id_to_node_idx = Vec::with_capacity(modules.len());
         for module in modules.iter() {
@@ -173,7 +175,7 @@ impl DependencyGraph {
             graph.add_edge(
                 module_id_to_node_idx[from_id],
                 module_id_to_node_idx[to_id],
-                ModuleId::from(0),
+                EdgeWeight,
             );
         }
         self.graph_data = Some(GraphData {

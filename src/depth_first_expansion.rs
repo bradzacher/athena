@@ -1,15 +1,10 @@
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use petgraph::{
-    graph::{DiGraph, NodeIndex},
-    Direction,
-};
+use petgraph::{graph::NodeIndex, Direction};
 use spliter::Spliterator;
 
-use crate::module::ModuleId;
-
-type Graph = DiGraph<ModuleId, ModuleId>;
+use crate::module::ModuleGraph;
 
 struct StackItem {
     node_idx: NodeIndex,
@@ -18,7 +13,7 @@ struct StackItem {
 
 pub struct DepthFirstExpansion<'a> {
     direction: Direction,
-    graph: &'a Graph,
+    graph: &'a ModuleGraph,
     max_depth: u32,
     stack: Vec<StackItem>,
     seen_nodes: Arc<RwLock<Vec<bool>>>,
@@ -27,7 +22,7 @@ pub struct DepthFirstExpansion<'a> {
 impl<'a> DepthFirstExpansion<'a> {
     /// Create a new search with the given starting point.
     pub fn new(
-        graph: &'a Graph,
+        graph: &'a ModuleGraph,
         direction: Direction,
         max_depth: u32,
         node_idx: NodeIndex,

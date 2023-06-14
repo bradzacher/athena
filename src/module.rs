@@ -3,6 +3,8 @@ use std::{
     ops::Index,
 };
 
+use petgraph::prelude::DiGraph;
+
 macro_rules! id_impl {
     ($name:ident) => {
         /// u32 allows up to 4,294,967,295 entities with just 4 bytes of storage - which is more than enough forever
@@ -61,3 +63,7 @@ impl Hash for Module {
         self.module_id.hash(state);
     }
 }
+
+// we don't actually use the edge weight in the graph for anything - so an empty struct saves us from allocating any memory
+pub struct EdgeWeight;
+pub type ModuleGraph = DiGraph<ModuleId, EdgeWeight>;
