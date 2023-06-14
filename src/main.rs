@@ -4,6 +4,7 @@ mod dependency_graph_store;
 mod depth_first_expansion;
 mod file_system;
 mod import_visitor;
+mod module;
 mod parser;
 mod tsconfig;
 

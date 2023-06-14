@@ -12,10 +12,10 @@ pub enum CliDirection {
     Dependents,
 }
 impl From<CliDirection> for Direction {
-    fn from(value: CliDirection) -> Direction {
+    fn from(value: CliDirection) -> Self {
         return match value {
-            CliDirection::Dependents => Direction::Incoming,
-            CliDirection::Dependencies => Direction::Outgoing,
+            CliDirection::Dependents => Self::Incoming,
+            CliDirection::Dependencies => Self::Outgoing,
         };
     }
 }

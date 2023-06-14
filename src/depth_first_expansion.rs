@@ -7,7 +7,7 @@ use petgraph::{
 };
 use spliter::Spliterator;
 
-use crate::dependency_graph_store::ModuleId;
+use crate::module::ModuleId;
 
 type Graph = DiGraph<ModuleId, ModuleId>;
 

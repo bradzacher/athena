@@ -11,29 +11,12 @@ use std::{
 };
 
 use crate::{
-    dependency_graph_store::{DependencyGraphStore, Module, ModuleId},
+    dependency_graph_store::DependencyGraphStore,
     depth_first_expansion::DepthFirstExpansion,
     file_system::extensions,
+    module::{Module, ModuleId},
     tsconfig::TSConfig,
 };
-
-struct EdgesIter<'a> {
-    module_edges: &'a [ModuleId],
-    from: usize,
-    to: usize,
-}
-impl<'a> Iterator for EdgesIter<'a> {
-    type Item = ModuleId;
-
-    fn next(&mut self) -> Option<ModuleId> {
-        if self.from < self.to {
-            self.from += 1;
-            return Some(self.module_edges[self.from - 1]);
-        } else {
-            return None;
-        }
-    }
-}
 
 type ImportResolutionErrors = HashMap<PathBuf, Vec<String>>;
 
@@ -184,13 +167,13 @@ impl DependencyGraph {
             DiGraph::with_capacity(module_count, resolved_dependencies.len());
         let mut module_id_to_node_idx = Vec::with_capacity(modules.len());
         for module in modules.iter() {
-            module_id_to_node_idx.insert(module.module_id, graph.add_node(module.module_id));
+            module_id_to_node_idx.insert(module.module_id.into(), graph.add_node(module.module_id));
         }
         for (from_id, to_id) in resolved_dependencies {
             graph.add_edge(
                 module_id_to_node_idx[from_id],
                 module_id_to_node_idx[to_id],
-                0,
+                ModuleId::from(0),
             );
         }
         self.graph_data = Some(GraphData {
@@ -226,7 +209,7 @@ impl DependencyGraph {
             .map(|node_idx| {
                 let module_id = graph_data.graph.node_weight(node_idx).unwrap();
                 self.dependency_graph_store
-                    .get_path_for_module(&self.dependency_graph_store.get_module_for_id(&module_id))
+                    .get_path_for_module(&self.dependency_graph_store.get_module_for_id(*module_id))
             })
             .fold(HashSet::new, |mut acc, path| {
                 acc.insert(path);

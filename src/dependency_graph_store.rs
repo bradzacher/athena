@@ -2,35 +2,15 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     ffi::OsString,
-    hash::{Hash, Hasher},
     path::{Component, Path, PathBuf},
     str::FromStr,
 };
 
 use crate::{
     file_system::{extensions, is_declaration_file},
+    module::{Module, ModuleId, PathId},
     tsconfig::TSConfig,
 };
-
-pub type PathId = usize;
-
-#[derive(Clone, Copy, Eq)]
-pub struct Module {
-    path_id: PathId,
-    pub module_id: ModuleId,
-}
-impl PartialEq<Module> for Module {
-    fn eq(&self, other: &Module) -> bool {
-        return self.module_id == other.module_id;
-    }
-}
-impl Hash for Module {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.module_id.hash(state);
-    }
-}
-
-pub type ModuleId = usize;
 
 pub struct DependencyGraphStore {
     path_id_to_path: Vec<PathBuf>,
@@ -51,7 +31,7 @@ impl DependencyGraphStore {
         let path_to_path_id: HashMap<PathBuf, PathId> = paths
             .iter()
             .enumerate()
-            .map(|(id, path)| (path.to_owned(), id))
+            .map(|(id, path)| (path.to_owned(), PathId::from(id)))
             .collect::<HashMap<PathBuf, PathId>>();
 
         let module_id_to_module = path_id_to_path
@@ -59,8 +39,8 @@ impl DependencyGraphStore {
             .enumerate()
             .map(|(id, _)| {
                 return Module {
-                    path_id: id,
-                    module_id: id,
+                    path_id: PathId::from(id),
+                    module_id: ModuleId::from(id),
                 };
             })
             .collect::<Vec<_>>();
@@ -98,7 +78,7 @@ impl DependencyGraphStore {
         }
 
         let paths = &mut self.path_id_to_path;
-        let new_id = paths.len();
+        let new_id = PathId::from(paths.len());
         paths.push(path.to_owned());
 
         self.path_to_path_id.insert(path.to_owned(), new_id);
@@ -275,7 +255,7 @@ impl DependencyGraphStore {
         let new_id = self.module_id_to_module.len();
         self.module_id_to_module.push(Module {
             path_id,
-            module_id: new_id,
+            module_id: ModuleId::from(new_id),
         });
         let module = &self.module_id_to_module[new_id];
 
@@ -284,8 +264,8 @@ impl DependencyGraphStore {
         return module.clone();
     }
 
-    pub fn get_module_for_id(&self, id: &ModuleId) -> Module {
-        return self.module_id_to_module[id.to_owned()].clone();
+    pub fn get_module_for_id(&self, id: ModuleId) -> Module {
+        return self.module_id_to_module[id].clone();
     }
 }
 
